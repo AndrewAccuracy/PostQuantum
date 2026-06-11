@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mlkem-leakage-detection"
+version = "0.1.0"
+description = "Reproducible timing leakage detection experiments for ML-KEM-768"
+requires-python = ">=3.9"
+dependencies = [
+    "matplotlib>=3.8,<4",
+    "numpy>=1.26,<3",
+    "pqcrypto>=0.3,<0.4",
+    "scikit-learn>=1.4,<2",
+    "scipy>=1.11,<2",
+]
+
+[project.scripts]
+mlkem-leakage = "mlkem_leakage.cli:main"
+mlkem-paper-artifacts = "mlkem_leakage.paper_artifacts:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

@@ -1,0 +1,6 @@
+# Versions validated on Python 3.9.6 and macOS arm64.
+matplotlib==3.9.4
+numpy==2.0.2
+pqcrypto==0.3.4
+scikit-learn==1.6.1
+scipy==1.13.1
