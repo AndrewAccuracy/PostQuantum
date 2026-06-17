@@ -3,6 +3,7 @@ set -euo pipefail
 
 PYTHON="${PYTHON:-.venv/bin/python}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-results/paper_runs}"
+ARTIFACTS="${ARTIFACTS:-results/paper_artifacts}"
 RUNS="${RUNS:-5}"
 SAMPLES_PER_CLASS="${SAMPLES_PER_CLASS:-400}"
 REPETITIONS="${REPETITIONS:-50}"
@@ -30,4 +31,4 @@ done
 
 "$PYTHON" -m mlkem_leakage.paper_artifacts \
   --input-root "$OUTPUT_ROOT" \
-  --output-dir results/paper_artifacts
+  --output-dir "$ARTIFACTS"

@@ -31,7 +31,6 @@
 ├── requirements.txt
 ├── requirements-dev.txt
 ├── docs/
-│   ├── PAPER_DRAFT.md
 │   ├── paper.tex
 │   ├── paper.pdf
 │   ├── references.bib
@@ -51,7 +50,10 @@
 │       ├── palette.py
 │       └── cli.py
 └── tests/
-    └── test_collector.py
+    ├── test_analysis.py
+    ├── test_cli.py
+    ├── test_collector.py
+    └── test_paper_artifacts.py
 ```
 
 实验生成结果会写入 `results/`。该目录已被 Git 忽略，因为多轮实验输出可能很大。
@@ -78,7 +80,7 @@ python -m pip install -e .
 预期结果：
 
 ```text
-5 passed
+10 passed
 ```
 
 运行一个小规模冒烟实验：
@@ -334,6 +336,7 @@ results/paper_artifacts/
 | `LOKY_MAX_CPU_COUNT` | 未设置 | 可选 joblib CPU 数量提示，macOS 上可减少 warning |
 | `PYTHON` | `.venv/bin/python` | 论文脚本使用的 Python 解释器 |
 | `OUTPUT_ROOT` | `results/paper_runs` | 多轮实验输出根目录 |
+| `ARTIFACTS` | `results/paper_artifacts` | 多轮实验图表和质量报告输出目录 |
 | `RUNS` | `5` | 独立重复运行次数 |
 | `SAMPLES_PER_CLASS` | `400` | 每个标签的聚合样本数量 |
 | `REPETITIONS` | `50` | 每个聚合样本的解封装重复次数 |
@@ -379,7 +382,7 @@ results/paper_artifacts/
 | `src/mlkem_leakage/analysis.py` | 统计检验、机器学习模型、绘图和泄漏判定规则 |
 | `src/mlkem_leakage/cli.py` | 单次运行和多参数集运行的命令行编排 |
 | `src/mlkem_leakage/paper_artifacts.py` | 数据质量审计和多轮实验图表生成 |
-| `tests/test_collector.py` | 密文扰动策略和样本平衡性的单元测试 |
+| `tests/` | 密文扰动、分析判定、CLI 输出和数据质量审计的单元测试 |
 
 ## 当前范围和限制
 

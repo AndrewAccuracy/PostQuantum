@@ -47,7 +47,7 @@ python -m pytest -q
 预期测试结果：
 
 ```text
-5 passed
+10 passed
 ```
 
 ## 3. 推荐运行方式
@@ -205,12 +205,13 @@ find results/paper_runs -name summary.json | wc -l
 
 ```bash
 OUTPUT_ROOT=results/paper_runs_retry \
+ARTIFACTS=results/paper_artifacts_retry \
 LOKY_MAX_CPU_COUNT=8 \
 MLKEM_PERMUTATIONS=20 \
 bash scripts/run_paper_experiments.sh
 ```
 
-跑完后生成汇总：
+如果只想对已有 retry 结果重新生成汇总，也可以单独运行：
 
 ```bash
 python -m mlkem_leakage.paper_artifacts \
@@ -255,4 +256,3 @@ python -m mlkem_leakage.cli \
 export LOKY_MAX_CPU_COUNT=8
 export MLKEM_PERMUTATIONS=200
 ```
-

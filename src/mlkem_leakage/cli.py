@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib.metadata
 import json
 import platform
 import sys
@@ -17,20 +16,8 @@ from .analysis import (
     write_feature_importance_plot,
     write_plot,
 )
-from .collector import collect_traces, write_csv, write_raw_csv
-from .collector import INVALID_STRATEGIES
-
-
-def _load_kem(variant: str):
-    if variant == "512":
-        from pqcrypto.kem import ml_kem_512
-        return ml_kem_512
-    elif variant == "1024":
-        from pqcrypto.kem import ml_kem_1024
-        return ml_kem_1024
-    else:
-        from pqcrypto.kem import ml_kem_768
-        return ml_kem_768
+from .backends import SUPPORTED_BACKENDS, make_kem
+from .collector import INVALID_STRATEGIES, collect_traces, write_csv, write_raw_csv
 
 
 def _arguments() -> argparse.Namespace:
@@ -42,6 +29,12 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--warmup", type=int, default=500)
     parser.add_argument("--seed", type=int, default=20260602)
     parser.add_argument("--control-delay-ns", type=int, default=20_000)
+    parser.add_argument(
+        "--backend",
+        choices=SUPPORTED_BACKENDS,
+        default="pqcrypto",
+        help="KEM implementation backend (default: pqcrypto)",
+    )
     parser.add_argument(
         "--variants",
         nargs="+",
@@ -104,7 +97,7 @@ it is not a proof that the implementation is side-channel secure.
 
 
 def _run_variant(args, variant: str, invalid_strategy: str, output_dir: Path) -> dict:
-    kem = _load_kem(variant)
+    backend = make_kem(int(variant), args.backend)
     output_dir.mkdir(parents=True, exist_ok=True)
     scenarios = {}
     for scenario, delay in (("real", 0), ("positive_control", args.control_delay_ns)):
@@ -117,7 +110,7 @@ def _run_variant(args, variant: str, invalid_strategy: str, output_dir: Path) ->
             seed=args.seed,
             control_delay_ns=delay,
             invalid_strategy=invalid_strategy,
-            kem=kem,
+            kem=backend,
         )
         write_csv(traces, output_dir / f"{scenario}_traces.csv")
         write_raw_csv(raw_timings, output_dir / f"{scenario}_raw_timings.csv")
@@ -134,9 +127,10 @@ def _run_variant(args, variant: str, invalid_strategy: str, output_dir: Path) ->
         "created_at": datetime.now(timezone.utc).isoformat(),
         "python_version": sys.version,
         "platform": platform.platform(),
-        "implementation": f"pqcrypto.kem.ml_kem_{variant}",
+        "implementation": backend.name,
+        "backend": args.backend,
+        "backend_version": backend.version,
         "invalid_strategy": invalid_strategy,
-        "pqcrypto_version": importlib.metadata.version("pqcrypto"),
         "parameters": vars(args)
         | {"output_dir": str(output_dir), "variant": variant, "invalid_strategy": invalid_strategy},
         "pipeline_valid": bool(
@@ -153,7 +147,7 @@ def _run_variant(args, variant: str, invalid_strategy: str, output_dir: Path) ->
 def _run_delay_sweep(args, output_dir: Path) -> None:
     sweep_dir = output_dir / "delay_sweep"
     sweep_dir.mkdir(parents=True, exist_ok=True)
-    kem = _load_kem(args.variants[0])
+    backend = make_kem(int(args.variants[0]), args.backend)
     invalid_strategy = args.invalid_strategies[0]
     sweep_results = []
     for delay in sorted(args.delay_sweep):
@@ -167,7 +161,7 @@ def _run_delay_sweep(args, output_dir: Path) -> None:
             seed=args.seed,
             control_delay_ns=delay,
             invalid_strategy=invalid_strategy,
-            kem=kem,
+            kem=backend,
         )
         report = analyze(traces, args.seed)
         best = max(m["balanced_accuracy_mean"] for m in report["models"])
