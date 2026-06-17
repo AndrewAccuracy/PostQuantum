@@ -2,22 +2,25 @@
 
 基于统计检验和机器学习的 ML-KEM 解封装时间侧信道筛查实验。
 
-本仓库提供一套可复现的软件计时实验，用于观察 `pqcrypto` 中 ML-KEM
-解封装实现面对有效密文和无效密文时，是否表现出稳定、可分类的执行时间差异。
-它适合作为课程论文、实验报告或实现级侧信道筛查的基础工程。
+本仓库提供一套可复现的软件计时实验，用于观察 ML-KEM 解封装实现
+面对有效密文和无效密文时，是否表现出稳定、可分类的执行时间差异。
+实验覆盖 **pqcrypto** 和 **liboqs** 两个独立的 ML-KEM 实现，
+96 次独立实验（pqcrypto 60 次 + liboqs 36 次）均未检测到稳定泄漏信号，
+两个后端结论一致，增强了结果的可重复性。
 
-> 重要边界：本项目不是密钥恢复攻击，也不能证明某个实现“没有侧信道风险”。
+> **重要边界：** 本项目不是密钥恢复攻击，也不能证明某个实现”没有侧信道风险”。
 > 它只回答一个更窄的问题：在当前软件计时条件、当前输入构造策略和当前分析阈值下，
 > 是否检测到可区分的时间信号。
 
 ## 项目能做什么
 
-- 采集 ML-KEM 解封装时间数据。
-- 对比有效密文与多种无效密文策略。
-- 使用统计检验和分组机器学习评估可区分性。
-- 使用正对照验证检测管线能识别已知时间信号。
-- 支持 ML-KEM-512、ML-KEM-768、ML-KEM-1024。
-- 生成 CSV、JSON、Markdown 报告和论文图表。
+- 采集 ML-KEM 解封装时间数据（支持 pqcrypto / liboqs 双后端）。
+- 对比有效密文与多种无效密文策略（single_bit / byte_flip / random_bytes / zero）。
+- 使用统计检验（Welch t、Mann-Whitney U、KS）和分组机器学习评估可区分性。
+- 使用正对照（20 µs 人为延迟）验证检测管线能识别已知时间信号。
+- 支持 ML-KEM-512、ML-KEM-768、ML-KEM-1024 三个参数集。
+- 跨实现并排比较两个后端的准确率、效应量和泄漏判定结论。
+- 生成 CSV、JSON、Markdown 报告和论文图表（马卡龙配色）。
 
 ![实验架构](docs/figures/overall_architecture.png)
 
@@ -29,30 +32,32 @@
 ├── RUN_EXPERIMENTS_README.md
 ├── pyproject.toml
 ├── requirements.txt
-├── requirements-dev.txt
 ├── docs/
-│   ├── paper.tex
-│   ├── paper.pdf
-│   ├── references.bib
+│   ├── paper.tex              # 论文源文件（XeLaTeX）
+│   ├── paper.pdf              # 编译好的论文
+│   ├── references.bib         # 参考文献
 │   └── figures/
+│       ├── fig_backend_acc.pdf    # 跨实现准确率对比图
+│       └── fig_backend_cohend.pdf # 效应量一致性散点图
 ├── scripts/
-│   ├── run_paper_experiments.sh
-│   ├── run_local_experiments.sh
+│   ├── run_paper_experiments.sh   # 论文级多轮实验驱动（支持 --backend）
+│   ├── compare_backends.py        # 两个后端并排比较表
+│   ├── plot_backend_comparison.py # 生成跨实现对比图表
 │   ├── generate_figures.py
 │   ├── build_variant_figures.py
 │   ├── plot_mde_sweep.py
 │   └── aggregate_paper_stats.py
 ├── src/
 │   └── mlkem_leakage/
-│       ├── collector.py
-│       ├── analysis.py
-│       ├── paper_artifacts.py
+│       ├── backends.py        # 后端适配器（PqcryptoBackend / LiboqsBackend）
+│       ├── collector.py       # 密钥生成、密文扰动、计时采集
+│       ├── analysis.py        # 统计检验、机器学习、泄漏判定
+│       ├── paper_artifacts.py # 多轮实验图表和质量报告
 │       ├── palette.py
-│       └── cli.py
+│       └── cli.py             # 命令行入口（含 --backend 参数）
 └── tests/
     ├── test_analysis.py
     ├── test_cli.py
-    ├── test_collector.py
     └── test_paper_artifacts.py
 ```
 
@@ -83,11 +88,27 @@ python -m pip install -e .
 10 passed
 ```
 
-运行一个小规模冒烟实验：
+运行一个小规模冒烟实验（pqcrypto 后端）：
 
 ```bash
 .venv/bin/python -m mlkem_leakage.cli \
+  --backend pqcrypto \
   --output-dir results/smoke_test \
+  --samples-per-class 40 \
+  --repetitions 5 \
+  --groups 5 \
+  --warmup 20 \
+  --variants 768 \
+  --invalid-strategies single_bit
+```
+
+使用 liboqs 后端运行相同实验：
+
+```bash
+# 需要先安装 liboqs 共享库（见下方"liboqs 后端"章节）
+.venv/bin/python -m mlkem_leakage.cli \
+  --backend liboqs \
+  --output-dir results/smoke_liboqs \
   --samples-per-class 40 \
   --repetitions 5 \
   --groups 5 \
@@ -212,6 +233,7 @@ mlkem-leakage --help
 
 | 参数 | 默认值 | 说明 |
 | --- | ---: | --- |
+| `--backend` | `pqcrypto` | 后端实现：`pqcrypto` 或 `liboqs` |
 | `--output-dir` | `results/latest` | 生成结果目录 |
 | `--samples-per-class` | `400` | 每个标签的聚合样本数量 |
 | `--repetitions` | `50` | 每个聚合样本包含的解封装重复次数 |
@@ -242,6 +264,61 @@ mlkem-leakage --help
   --groups 20 \
   --delay-sweep 500 1000 2000 5000 10000 20000
 ```
+
+## liboqs 后端
+
+`liboqs` 是 Open Quantum Safe 项目的 C 库，提供独立于 `pqcrypto` 的 ML-KEM 实现。
+本项目使用统一后端适配器接口，两个后端可直接互换，无需修改实验逻辑。
+
+### 安装（macOS）
+
+```bash
+# 1. 编译 liboqs 共享库（brew 仅提供静态库，需手动构建）
+git clone --depth 1 https://github.com/open-quantum-safe/liboqs /tmp/liboqs-src
+cmake -S /tmp/liboqs-src -B /tmp/liboqs-build \
+      -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build /tmp/liboqs-build -- -j4
+
+# 2. 安装 Python 绑定
+.venv/bin/pip install liboqs-python
+
+# 3. 运行时设置动态库路径
+export DYLD_LIBRARY_PATH=/tmp/liboqs-build/lib
+```
+
+### 安装（Ubuntu/Debian）
+
+```bash
+sudo apt install liboqs-dev
+.venv/bin/pip install liboqs-python
+```
+
+## 跨实现对比
+
+在两个后端上运行相同实验矩阵，然后并排比较结果：
+
+```bash
+# pqcrypto 多轮实验
+BACKEND=pqcrypto OUTPUT_ROOT=results/pqcrypto_runs \
+bash scripts/run_paper_experiments.sh
+
+# liboqs 多轮实验（需先安装 liboqs）
+DYLD_LIBRARY_PATH=/tmp/liboqs-build/lib \
+BACKEND=liboqs OUTPUT_ROOT=results/liboqs_runs \
+bash scripts/run_paper_experiments.sh
+
+# 并排比较表
+.venv/bin/python scripts/compare_backends.py \
+  --roots results/pqcrypto_runs results/liboqs_runs \
+  --labels pqcrypto liboqs
+
+# 生成对比图表
+.venv/bin/python scripts/plot_backend_comparison.py
+```
+
+本项目在 pqcrypto（60 次）和 liboqs（36 次）两个独立实现上运行了完整实验矩阵，
+两个后端均未检测到稳定泄漏信号（泄漏检出 0/36 ~ 0/60），结论高度一致。
+详见 `docs/figures/fig_backend_acc.pdf` 和 `docs/paper.pdf` 第5.6节。
 
 ## 输出文件
 
@@ -386,12 +463,13 @@ results/paper_artifacts/
 
 ## 当前范围和限制
 
-- 实验目标是所选 `pqcrypto` ML-KEM 绑定的时间行为。
+- 实验覆盖 `pqcrypto==0.3.4` 和 `liboqs-python==0.14.1` 两个 Python 绑定，
+  均运行于 macOS arm64（Apple Silicon）+ Python 3.9.6。
 - 标签区分的是有效密文和无效密文，不是私钥 bit。
-- 项目没有实现自适应选择密文攻击。
-- 项目没有尝试恢复密钥。
+- 项目没有实现自适应选择密文攻击，也没有尝试恢复密钥。
+- 观测粒度是端到端软件计时，无法排查指令级（如 KyberSlash 类）泄漏。
 - 单一操作系统、CPU、Python 版本或库构建上的结果不应直接泛化。
-- 未检测到泄漏只能表述为“在当前设置下未检测到”，不能表述为“已证明安全”。
+- 未检测到泄漏只能表述为”在当前设置下未检测到”，不能表述为”已证明安全”。
 
 ## 报告中的建议表述
 
