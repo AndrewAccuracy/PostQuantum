@@ -1,12 +1,18 @@
 # ML-KEM 时间泄漏检测
 
+**仓库地址：** https://github.com/AndrewAccuracy/PostQuantum  
+**论文数据与结果：** https://github.com/AndrewAccuracy/PostQuantum/releases
+
 基于统计检验和机器学习的 ML-KEM 解封装时间侧信道筛查实验。
 
 本仓库提供一套可复现的软件计时实验，用于观察 ML-KEM 解封装实现
 面对有效密文和无效密文时，是否表现出稳定、可分类的执行时间差异。
-实验覆盖 **pqcrypto** 和 **liboqs** 两个独立的 ML-KEM 实现，
-96 次独立实验（pqcrypto 60 次 + liboqs 36 次）均未检测到稳定泄漏信号，
-两个后端结论一致，增强了结果的可重复性。
+论文主实验以 **pqcrypto** 的 60 次完整矩阵为核心，代码同时保留
+**liboqs** 后端适配和跨实现比较脚本，可作为补充验证使用。
+
+**实验数据说明：** 本项目所有数据均为自行采集的 ML-KEM 解封装时间测量数据，
+不依赖任何外部数据集。采集程序随仓库代码提供，原始 CSV 与分析报告
+通过 GitHub Release 附件分发（见上方链接）。
 
 > **重要边界：** 本项目不是密钥恢复攻击，也不能证明某个实现”没有侧信道风险”。
 > 它只回答一个更窄的问题：在当前软件计时条件、当前输入构造策略和当前分析阈值下，
@@ -14,13 +20,13 @@
 
 ## 项目能做什么
 
-- 采集 ML-KEM 解封装时间数据（支持 pqcrypto / liboqs 双后端）。
+- 采集 ML-KEM 解封装时间数据（论文主实验使用 pqcrypto，另支持 liboqs 后端）。
 - 对比有效密文与多种无效密文策略（single_bit / byte_flip / random_bytes / zero）。
 - 使用统计检验（Welch t、Mann-Whitney U、KS）和分组机器学习评估可区分性。
 - 使用正对照（20 µs 人为延迟）验证检测管线能识别已知时间信号。
 - 支持 ML-KEM-512、ML-KEM-768、ML-KEM-1024 三个参数集。
-- 跨实现并排比较两个后端的准确率、效应量和泄漏判定结论。
-- 生成 CSV、JSON、Markdown 报告和论文图表（马卡龙配色）。
+- 可选地跨实现并排比较两个后端的准确率、效应量和泄漏判定结论。
+- 生成 CSV、JSON、Markdown 报告和论文图表（蓝/红/灰论文配色）。
 
 ![实验架构](docs/figures/overall_architecture.png)
 
@@ -36,9 +42,7 @@
 │   ├── paper.tex              # 论文源文件（XeLaTeX）
 │   ├── paper.pdf              # 编译好的论文
 │   ├── references.bib         # 参考文献
-│   └── figures/
-│       ├── fig_backend_acc.pdf    # 跨实现准确率对比图
-│       └── fig_backend_cohend.pdf # 效应量一致性散点图
+│   └── figures/               # 论文图表和补充对比图
 ├── scripts/
 │   ├── run_paper_experiments.sh   # 论文级多轮实验驱动（支持 --backend）
 │   ├── compare_backends.py        # 两个后端并排比较表
@@ -62,6 +66,9 @@
 ```
 
 实验生成结果会写入 `results/`。该目录已被 Git 忽略，因为多轮实验输出可能很大。
+原始计时 CSV、JSON 分析报告和论文图表已打包发布在
+[GitHub Release](https://github.com/AndrewAccuracy/PostQuantum/releases)，
+下载后解压到 `results/` 即可重新生成所有论文图表。本地 `results/` 也可继续保留用于复现。
 
 ## 快速开始
 
@@ -316,9 +323,9 @@ bash scripts/run_paper_experiments.sh
 .venv/bin/python scripts/plot_backend_comparison.py
 ```
 
-本项目在 pqcrypto（60 次）和 liboqs（36 次）两个独立实现上运行了完整实验矩阵，
-两个后端均未检测到稳定泄漏信号（泄漏检出 0/36 ~ 0/60），结论高度一致。
-详见 `docs/figures/fig_backend_acc.pdf` 和 `docs/paper.pdf` 第5.6节。
+论文主实验使用 pqcrypto 的 60 次完整矩阵；本仓库也保留 liboqs 后端和跨实现比较脚本。
+若另外运行 liboqs 对照实验，可用 `scripts/compare_backends.py` 和
+`scripts/plot_backend_comparison.py` 生成补充比较图。
 
 ## 输出文件
 
@@ -463,8 +470,9 @@ results/paper_artifacts/
 
 ## 当前范围和限制
 
-- 实验覆盖 `pqcrypto==0.3.4` 和 `liboqs-python==0.14.1` 两个 Python 绑定，
-  均运行于 macOS arm64（Apple Silicon）+ Python 3.9.6。
+- 论文正式实验覆盖 `pqcrypto==0.3.4`，运行于 Windows 11 x86_64
+  + Python 3.12.12（Anaconda 发行版）。
+- macOS arm64 和 liboqs 结果属于补充或探索性验证，不能替代完整跨平台矩阵。
 - 标签区分的是有效密文和无效密文，不是私钥 bit。
 - 项目没有实现自适应选择密文攻击，也没有尝试恢复密钥。
 - 观测粒度是端到端软件计时，无法排查指令级（如 KyberSlash 类）泄漏。
