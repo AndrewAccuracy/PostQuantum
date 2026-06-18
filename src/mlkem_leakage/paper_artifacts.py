@@ -146,7 +146,7 @@ def _label(run: Dict[str, object]) -> str:
 
 def _save_figure(output_dir: Path, name: str) -> None:
     plt.tight_layout()
-    plt.savefig(output_dir / name, dpi=240, bbox_inches="tight")
+    plt.savefig(output_dir / name, dpi=300, bbox_inches="tight")
     plt.close()
 
 
@@ -233,41 +233,54 @@ def _plot_run_stability(runs: List[Dict[str, object]], output_dir: Path) -> None
 
 
 def _plot_trace_order(runs: List[Dict[str, object]], output_dir: Path) -> None:
-    rows = runs[-1]["rows"]["real"]
-    values = np.asarray([float(row["mean_ns"]) / 1000 for row in rows])
-    lo, hi = np.percentile(values, [0, 99])
-    margin = (hi - lo) * 0.08
-    ylim_hi = hi + margin
-    hidden = int(np.sum(values > ylim_hi))
+    def trimmed_values(values: np.ndarray, proportion: float = 0.1) -> np.ndarray:
+        ordered = np.sort(values)
+        trim = int(len(ordered) * proportion)
+        if trim == 0 or len(ordered) <= 2 * trim:
+            return ordered
+        return ordered[trim:-trim]
 
-    plt.figure(figsize=(7.4, 4.4))
-    scatter_colors = {0: VALID_COLOR, 1: ALTERED_COLOR}
-    for label, text in ((0, "Valid ciphertext"), (1, "Altered ciphertext")):
-        selected = [row for row in rows if int(row["label"]) == label]
-        plt.scatter(
-            [int(row["trace_id"]) for row in selected],
-            [float(row["mean_ns"]) / 1000 for row in selected],
-            s=13,
-            alpha=0.75,
-            label=text,
-            color=scatter_colors[label],
-            edgecolors="white",
-            linewidths=0.3,
-        )
-    plt.ylim(lo - margin, ylim_hi)
-    if hidden:
-        plt.text(
-            0.01,
-            0.97,
-            f"{hidden} point(s) above {ylim_hi:.0f} us not shown (axis clipped at 99th pct)",
-            transform=plt.gca().transAxes,
-            ha="left",
-            va="top",
-            fontsize=8,
-            color=NEUTRAL_COLOR,
-        )
-    plt.xlabel("Randomized collection order")
-    plt.ylabel("Mean decapsulation time per aggregate trace (us)")
+    rows = runs[-1]["rows"]["real"]
+    trace_ids = np.asarray([int(row["trace_id"]) for row in rows])
+    labels = np.asarray([int(row["label"]) for row in rows])
+    means = np.asarray([float(row["mean_ns"]) for row in rows])
+    n_bins = 20
+    bins = np.linspace(trace_ids.min(), trace_ids.max() + 1, n_bins + 1)
+
+    xs, deltas, ci95 = [], [], []
+    for index in range(n_bins):
+        mask = (trace_ids >= bins[index]) & (trace_ids < bins[index + 1])
+        valid = means[mask & (labels == 0)]
+        altered = means[mask & (labels == 1)]
+        if len(valid) < 2 or len(altered) < 2:
+            continue
+        valid_trimmed = trimmed_values(valid)
+        altered_trimmed = trimmed_values(altered)
+        xs.append((bins[index] + bins[index + 1]) / 2)
+        deltas.append((altered_trimmed.mean() - valid_trimmed.mean()) / 1000)
+        se = math.sqrt(
+            valid_trimmed.var(ddof=1) / len(valid_trimmed)
+            + altered_trimmed.var(ddof=1) / len(altered_trimmed)
+        ) / 1000
+        ci95.append(1.96 * se)
+
+    plt.figure(figsize=(7.4, 4.2))
+    plt.axhline(0, color=NEUTRAL_COLOR, linestyle="--", linewidth=1, label="No label difference")
+    plt.errorbar(
+        xs,
+        deltas,
+        yerr=ci95,
+        fmt="o-",
+        color=ALTERED_COLOR,
+        ecolor=VALID_COLOR,
+        elinewidth=1.0,
+        capsize=3,
+        markersize=4,
+        linewidth=1.4,
+        label="Altered - valid trimmed mean",
+    )
+    plt.xlabel("Randomized collection order (20 adjacent bins)")
+    plt.ylabel("Altered - valid time (us)")
     plt.title(f"Collection-order diagnostic: {runs[-1]['name']}")
     plt.legend()
     _save_figure(output_dir, "trace_order_diagnostic.png")

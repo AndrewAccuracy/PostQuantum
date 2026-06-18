@@ -13,11 +13,19 @@ from __future__ import annotations
 
 import glob
 import json
+import os
+import tempfile
 from pathlib import Path
+
+os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "mlkem-leakage-matplotlib"))
+os.environ.setdefault("XDG_CACHE_HOME", str(Path(tempfile.gettempdir()) / "mlkem-leakage-cache"))
 
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import sys
@@ -75,7 +83,7 @@ def main() -> None:
 
     out_dir = ROOT / "docs" / "figures"
     out_dir.mkdir(parents=True, exist_ok=True)
-    plt.savefig(out_dir / "delay_sweep_mde.png", dpi=160)
+    plt.savefig(out_dir / "delay_sweep_mde.png", dpi=300)
     plt.savefig(out_dir / "delay_sweep_mde.pdf")
     plt.close()
 

@@ -72,14 +72,14 @@ def _report(scenario: str) -> dict:
 
 def test_run_variant_writes_summary_report_and_pipeline_status(tmp_path, monkeypatch):
     calls = []
-    fake_kem = object()
+    fake_kem = SimpleNamespace(name="pqcrypto.kem.ml_kem_768", version="test")
 
     def fake_collect_traces(**kwargs):
         calls.append(kwargs)
         scenario = kwargs["scenario"]
         return [_trace(scenario)], [_raw(scenario)]
 
-    monkeypatch.setattr(cli, "_load_kem", lambda variant: fake_kem)
+    monkeypatch.setattr(cli, "make_kem", lambda variant, backend: fake_kem)
     monkeypatch.setattr(cli, "collect_traces", fake_collect_traces)
     monkeypatch.setattr(cli, "analyze", lambda traces, seed: _report(traces[0].scenario))
     monkeypatch.setattr(cli, "write_plot", lambda traces, output_dir, scenario: None)
@@ -97,6 +97,7 @@ def test_run_variant_writes_summary_report_and_pipeline_status(tmp_path, monkeyp
         warmup=1,
         seed=7,
         control_delay_ns=20_000,
+        backend="pqcrypto",
         variants=["768"],
         invalid_strategies=["single_bit"],
         delay_sweep=None,
@@ -108,7 +109,7 @@ def test_run_variant_writes_summary_report_and_pipeline_status(tmp_path, monkeyp
     assert summary["implementation"] == "pqcrypto.kem.ml_kem_768"
     assert summary["parameters"]["output_dir"] == str(tmp_path)
     assert [call["control_delay_ns"] for call in calls] == [0, 20_000]
-    assert {call["kem"] for call in calls} == {fake_kem}
+    assert all(call["kem"] is fake_kem for call in calls)
     assert (tmp_path / "summary.json").exists()
     assert (tmp_path / "REPORT.md").exists()
     assert (tmp_path / "real_traces.csv").exists()

@@ -6,16 +6,21 @@ Reads the 5-run x 3-variant x 4-strategy paper matrix and writes:
   (single_bit strategy, all 5 runs combined)
 - variant_strategy_accuracy.png: real vs positive-control balanced accuracy per
   variant and invalid-ciphertext strategy, averaged across runs
-- variant_feature_importance.png: random-forest feature importance per variant
-  (single_bit strategy, averaged across runs)
+- variant_feature_importance.csv: random-forest feature importance table per
+  variant (single_bit strategy, averaged across runs)
 """
 
 from __future__ import annotations
 
 import csv
 import json
+import os
+import tempfile
 from collections import defaultdict
 from pathlib import Path
+
+os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "mlkem-leakage-matplotlib"))
+os.environ.setdefault("XDG_CACHE_HOME", str(Path(tempfile.gettempdir()) / "mlkem-leakage-cache"))
 
 import matplotlib
 
@@ -23,7 +28,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from mlkem_leakage.palette import ALTERED_COLOR, CONTROL_COLOR, CYCLE, NEUTRAL_COLOR, VALID_COLOR, apply_style
+from mlkem_leakage.palette import ALTERED_COLOR, CONTROL_COLOR, NEUTRAL_COLOR, VALID_COLOR, apply_style
 
 apply_style()
 
@@ -31,11 +36,26 @@ INPUT_ROOT = Path("results/paper_runs")
 OUTPUT_DIR = Path("results/paper_artifacts")
 VARIANTS = ["512", "768", "1024"]
 STRATEGIES = ["single_bit", "byte_flip", "random_bytes", "zero"]
+FEATURE_LABELS = {
+    "mean_ns": "mean",
+    "median_ns": "median",
+    "std_ns": "std",
+    "min_ns": "min",
+    "max_ns": "max",
+    "p10_ns": "p10",
+    "p90_ns": "p90",
+    "iqr_ns": "IQR",
+    "mad_ns": "MAD",
+    "trimmed_mean_ns": "trimmed mean",
+    "skewness": "skewness",
+    "kurtosis": "kurtosis",
+    "cv": "CV",
+}
 
 
 def _save(name: str) -> None:
     plt.tight_layout()
-    plt.savefig(OUTPUT_DIR / name, dpi=240, bbox_inches="tight")
+    plt.savefig(OUTPUT_DIR / name, dpi=300, bbox_inches="tight")
     plt.close()
 
 
@@ -96,12 +116,14 @@ def plot_strategy_accuracy() -> None:
         axis.set_title(f"ML-KEM-{variant}")
         axis.set_ylim(0, 1.08)
     axes[0].set_ylabel("Best-model balanced accuracy\n(mean +/- sd over 5 runs)")
-    axes[0].legend()
+    handles, labels = axes[0].get_legend_handles_labels()
+    figure.legend(handles, labels, loc="lower center", ncol=2, bbox_to_anchor=(0.5, -0.02))
     figure.suptitle("Real vs. positive-control accuracy by parameter set and invalid-ciphertext strategy")
+    figure.subplots_adjust(bottom=0.18)
     _save("variant_strategy_accuracy.png")
 
 
-def plot_feature_importance() -> None:
+def write_feature_importance_table() -> None:
     feature_names: list[str] | None = None
     per_variant: dict[str, list[list[float]]] = defaultdict(list)
     for variant in VARIANTS:
@@ -116,28 +138,26 @@ def plot_feature_importance() -> None:
     assert feature_names is not None
     means = {variant: np.mean(per_variant[variant], axis=0) for variant in VARIANTS}
     overall = np.mean([means[v] for v in VARIANTS], axis=0)
-    order_idx = np.argsort(overall)
-    sorted_features = [feature_names[i] for i in order_idx]
-
-    y = np.arange(len(sorted_features))
-    height = 0.25
-    plt.figure(figsize=(7.5, 6.0))
-    for offset, (variant, color) in enumerate(zip(VARIANTS, CYCLE)):
-        values = [means[variant][i] for i in order_idx]
-        plt.barh(y + (offset - 1) * height, values, height, label=f"ML-KEM-{variant}", color=color)
-    plt.yticks(y, sorted_features)
-    plt.xlabel("Mean decrease in impurity (Random Forest, real scenario)")
-    plt.title("Feature importance by parameter set (single_bit, mean over 5 runs)")
-    plt.legend()
-    _save("variant_feature_importance.png")
+    order_idx = np.argsort(overall)[::-1]
+    with (OUTPUT_DIR / "variant_feature_importance.csv").open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["feature", "ml_kem_512", "ml_kem_768", "ml_kem_1024", "mean"])
+        for i in order_idx:
+            writer.writerow(
+                [
+                    FEATURE_LABELS.get(feature_names[i], feature_names[i]),
+                    *(f"{means[variant][i]:.6f}" for variant in VARIANTS),
+                    f"{overall[i]:.6f}",
+                ]
+            )
 
 
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     plot_timing_distributions()
     plot_strategy_accuracy()
-    plot_feature_importance()
-    print(f"Wrote variant comparison figures to {OUTPUT_DIR}")
+    write_feature_importance_table()
+    print(f"Wrote variant comparison artifacts to {OUTPUT_DIR}")
 
 
 if __name__ == "__main__":

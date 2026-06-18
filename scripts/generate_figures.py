@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "mlkem-leakage-matplotlib"))
+os.environ.setdefault("XDG_CACHE_HOME", str(Path(tempfile.gettempdir()) / "mlkem-leakage-cache"))
 
 import matplotlib
 matplotlib.use("Agg")
@@ -23,10 +24,20 @@ from scipy.stats import gaussian_kde
 from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
 from sklearn.model_selection import GroupShuffleSplit, permutation_test_score
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from mlkem_leakage.palette import (  # noqa: E402
+    ALTERED_COLOR,
+    CONTROL_COLOR,
+    NEUTRAL_COLOR,
+    VALID_COLOR,
+    apply_style,
+)
+
 RESULTS_DIR = Path("results/latest")
 OUTPUT_DIR = Path("docs/figures")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+apply_style()
 plt.rcParams.update({
     "font.family": "DejaVu Sans",
     "font.size": 9,
@@ -43,10 +54,11 @@ plt.rcParams.update({
     "figure.constrained_layout.use": True,
 })
 
-C_VALID   = "#2166ac"
-C_ALTERED = "#d6604d"
-C_REAL    = "#1b7837"
-C_CTRL    = "#762a83"
+C_VALID = VALID_COLOR
+C_ALTERED = ALTERED_COLOR
+C_REAL = VALID_COLOR
+C_CTRL = CONTROL_COLOR
+C_NEUTRAL = NEUTRAL_COLOR
 
 FEATURES = [
     "mean_ns", "median_ns", "std_ns", "min_ns", "max_ns",
@@ -61,6 +73,9 @@ FEATURE_LABELS = [
 
 MODEL_ORDER = ["logistic_regression", "linear_svm", "random_forest", "hist_gradient_boosting"]
 MODEL_LABELS = ["Logistic\nRegression", "Linear SVM", "Random\nForest", "Hist Gradient\nBoosting"]
+N_JOBS = int(os.environ.get("MLKEM_N_JOBS", "1"))
+N_PERMUTATIONS = int(os.environ.get("MLKEM_PERMUTATIONS", "300"))
+SKIP_PERMUTATION = os.environ.get("MLKEM_SKIP_PERMUTATION") == "1"
 
 
 def load_data():
@@ -90,7 +105,7 @@ def fig_distributions(real_df: pd.DataFrame, ctrl_df: pd.DataFrame):
 
     axes[0].legend(framealpha=0.8)
     plt.savefig(OUTPUT_DIR / "fig_distribution.pdf", bbox_inches="tight")
-    plt.savefig(OUTPUT_DIR / "fig_distribution.png", dpi=240, bbox_inches="tight")
+    plt.savefig(OUTPUT_DIR / "fig_distribution.png", dpi=300, bbox_inches="tight")
     plt.close()
     print("fig_distribution done")
 
@@ -113,7 +128,7 @@ def fig_model_accuracy(summary: dict):
                       yerr=stds, capsize=3, color=color, alpha=0.8,
                       label=label, error_kw={"linewidth": 0.8})
 
-    ax.axhline(0.5, color="black", linestyle="--", linewidth=1.0, label="Random baseline (0.5)")
+    ax.axhline(0.5, color=C_NEUTRAL, linestyle="--", linewidth=1.0, label="Random baseline (0.5)")
     ax.set_xticks(x)
     ax.set_xticklabels(MODEL_LABELS, ha="center")
     ax.set_ylabel("Balanced accuracy")
@@ -131,7 +146,7 @@ def fig_model_accuracy(summary: dict):
                 f"p={pval:.2f}", ha="center", va="bottom", fontsize=7, color=C_REAL)
 
     plt.savefig(OUTPUT_DIR / "fig_models.pdf", bbox_inches="tight")
-    plt.savefig(OUTPUT_DIR / "fig_models.png", dpi=240, bbox_inches="tight")
+    plt.savefig(OUTPUT_DIR / "fig_models.png", dpi=300, bbox_inches="tight")
     plt.close()
     print("fig_models done")
 
@@ -150,7 +165,7 @@ def fig_permutation_test(real_df: pd.DataFrame):
         "Linear SVM": __import__("sklearn.svm", fromlist=["SVC"]).SVC(
             kernel="linear", probability=True, C=0.1, random_state=42),
         "Random\nForest": RandomForestClassifier(
-            n_estimators=200, min_samples_leaf=3, random_state=42, n_jobs=-1),
+            n_estimators=200, min_samples_leaf=3, random_state=42, n_jobs=N_JOBS),
         "Hist Gradient\nBoosting": HistGradientBoostingClassifier(
             max_iter=200, random_state=42),
     }
@@ -179,13 +194,13 @@ def fig_permutation_test(real_df: pd.DataFrame):
             warnings.filterwarnings("ignore", category=RuntimeWarning)
             obs_score, perm_scores, pvalue = permutation_test_score(
                 model, X, y, groups=groups, cv=cv,
-                n_permutations=300, scoring="balanced_accuracy",
-                n_jobs=-1, random_state=42,
+                n_permutations=N_PERMUTATIONS, scoring="balanced_accuracy",
+                n_jobs=N_JOBS, random_state=42,
             )
-        ax.hist(perm_scores, bins=25, color="steelblue", alpha=0.7, edgecolor="white",
+        ax.hist(perm_scores, bins=25, color=C_VALID, alpha=0.7, edgecolor="white",
                 linewidth=0.4, label="Null distribution")
-        ax.axvline(obs_score, color="crimson", linewidth=1.8, label=f"Observed = {obs_score:.3f}")
-        ax.axvline(0.5, color="gray", linewidth=1.0, linestyle="--", label="Random (0.5)")
+        ax.axvline(obs_score, color=C_ALTERED, linewidth=1.8, label=f"Observed = {obs_score:.3f}")
+        ax.axvline(0.5, color=C_NEUTRAL, linewidth=1.0, linestyle="--", label="Random (0.5)")
         ax.set_title(f"{name}  (p = {pvalue:.3f})", fontsize=9)
         ax.set_xlabel("Balanced accuracy")
         ax.set_ylabel("Count")
@@ -193,7 +208,7 @@ def fig_permutation_test(real_df: pd.DataFrame):
 
     fig.suptitle("Permutation test null distributions — real scenario", fontsize=10)
     plt.savefig(OUTPUT_DIR / "fig_permutation.pdf", bbox_inches="tight")
-    plt.savefig(OUTPUT_DIR / "fig_permutation.png", dpi=240, bbox_inches="tight")
+    plt.savefig(OUTPUT_DIR / "fig_permutation.png", dpi=300, bbox_inches="tight")
     plt.close()
     print("fig_permutation done")
 
@@ -208,7 +223,7 @@ def fig_feature_importance(real_df: pd.DataFrame):
     importances_per_fold = []
     for train, _ in cv.split(X, y, groups):
         rf = RandomForestClassifier(n_estimators=300, min_samples_leaf=3,
-                                    random_state=42, n_jobs=-1)
+                                    random_state=42, n_jobs=N_JOBS)
         rf.fit(X[train], y[train])
         importances_per_fold.append(rf.feature_importances_)
 
@@ -218,7 +233,7 @@ def fig_feature_importance(real_df: pd.DataFrame):
 
     order = np.argsort(mean_imp)[::-1]
     fig, ax = plt.subplots(figsize=(6.5, 3.4))
-    colors = [C_REAL if i < 5 else "gray" for i in range(len(FEATURES))]
+    colors = [C_REAL if i < 5 else C_NEUTRAL for i in range(len(FEATURES))]
     bars = ax.barh(
         [FEATURE_LABELS[i] for i in order[::-1]],
         mean_imp[order[::-1]],
@@ -229,24 +244,63 @@ def fig_feature_importance(real_df: pd.DataFrame):
     ax.set_xlabel("Mean decrease in impurity (importance)")
     ax.set_title("Random Forest feature importance — real scenario\n(mean ± std over 8 CV folds)")
     plt.savefig(OUTPUT_DIR / "fig_features.pdf", bbox_inches="tight")
-    plt.savefig(OUTPUT_DIR / "fig_features.png", dpi=240, bbox_inches="tight")
+    plt.savefig(OUTPUT_DIR / "fig_features.png", dpi=300, bbox_inches="tight")
     plt.close()
     print("fig_features done")
 
 
 def fig_trace_order(real_df: pd.DataFrame):
-    """Figure 5: Collection order diagnostic scatter plot."""
-    fig, ax = plt.subplots(figsize=(6.5, 2.8))
-    for label, color, name in [(0, C_VALID, "Valid"), (1, C_ALTERED, "Altered")]:
-        sub = real_df[real_df["label"] == label]
-        ax.scatter(sub["trace_id"], sub["mean_ns"] / 1e3,
-                   s=4, alpha=0.35, color=color, label=name, rasterized=True)
-    ax.set_xlabel("Randomised collection order (trace ID)")
-    ax.set_ylabel("Mean decapsulation time (µs)")
-    ax.set_title("Collection-order diagnostic — real scenario")
-    ax.legend(framealpha=0.8, markerscale=3)
+    """Figure 5: Collection-order diagnostic using binned label differences."""
+    def trimmed_mean(values: np.ndarray, proportion: float = 0.1) -> float:
+        ordered = np.sort(values)
+        trim = int(len(ordered) * proportion)
+        if trim == 0 or len(ordered) <= 2 * trim:
+            return float(np.mean(ordered))
+        return float(np.mean(ordered[trim:-trim]))
+
+    fig, ax = plt.subplots(figsize=(6.5, 2.9))
+    df = real_df.copy()
+    n_bins = 20
+    bins = np.linspace(df["trace_id"].min(), df["trace_id"].max() + 1, n_bins + 1)
+    df["order_bin"] = pd.cut(df["trace_id"], bins=bins, include_lowest=True, labels=False)
+
+    xs, deltas, ci95 = [], [], []
+    for bin_index in range(n_bins):
+        part = df[df["order_bin"] == bin_index]
+        valid = part.loc[part["label"] == 0, "mean_ns"].to_numpy()
+        altered = part.loc[part["label"] == 1, "mean_ns"].to_numpy()
+        if len(valid) < 2 or len(altered) < 2:
+            continue
+        valid_trimmed = np.sort(valid)[max(1, int(len(valid) * 0.1)) : -max(1, int(len(valid) * 0.1))]
+        altered_trimmed = np.sort(altered)[max(1, int(len(altered) * 0.1)) : -max(1, int(len(altered) * 0.1))]
+        xs.append((bins[bin_index] + bins[bin_index + 1]) / 2)
+        deltas.append((trimmed_mean(altered) - trimmed_mean(valid)) / 1e3)
+        se = np.sqrt(
+            valid_trimmed.var(ddof=1) / len(valid_trimmed)
+            + altered_trimmed.var(ddof=1) / len(altered_trimmed)
+        ) / 1e3
+        ci95.append(1.96 * se)
+
+    ax.axhline(0, color=C_NEUTRAL, linewidth=1.1, linestyle="--", label="No label difference")
+    ax.errorbar(
+        xs,
+        deltas,
+        yerr=ci95,
+        fmt="o-",
+        color=C_ALTERED,
+        ecolor=C_VALID,
+        elinewidth=1.0,
+        capsize=2.8,
+        markersize=3.8,
+        linewidth=1.4,
+        label="Altered - valid trimmed mean",
+    )
+    ax.set_xlabel("Randomized collection order (20 adjacent bins)")
+    ax.set_ylabel("Altered - valid time (µs)")
+    ax.set_title("Collection-order diagnostic — binned trimmed-mean difference")
+    ax.legend(framealpha=0.85, loc="upper right")
     plt.savefig(OUTPUT_DIR / "fig_trace_order.pdf", bbox_inches="tight")
-    plt.savefig(OUTPUT_DIR / "fig_trace_order.png", dpi=240, bbox_inches="tight")
+    plt.savefig(OUTPUT_DIR / "fig_trace_order.png", dpi=300, bbox_inches="tight")
     plt.close()
     print("fig_trace_order done")
 
@@ -259,6 +313,9 @@ if __name__ == "__main__":
     fig_model_accuracy(summary)
     fig_trace_order(real_df)
     fig_feature_importance(real_df)
-    print("Running permutation test figure (this takes ~2 min)...")
-    fig_permutation_test(real_df)
+    if SKIP_PERMUTATION:
+        print("Skipping permutation test figure (MLKEM_SKIP_PERMUTATION=1)")
+    else:
+        print("Running permutation test figure (set MLKEM_SKIP_PERMUTATION=1 to skip)...")
+        fig_permutation_test(real_df)
     print("\nAll figures saved to", OUTPUT_DIR)

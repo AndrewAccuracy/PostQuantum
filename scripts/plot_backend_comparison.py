@@ -8,7 +8,13 @@ Outputs:
 from __future__ import annotations
 
 import json
+import os
+import sys
+import tempfile
 from pathlib import Path
+
+os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "mlkem-leakage-matplotlib"))
+os.environ.setdefault("XDG_CACHE_HOME", str(Path(tempfile.gettempdir()) / "mlkem-leakage-cache"))
 
 import matplotlib
 matplotlib.use("Agg")
@@ -16,17 +22,24 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 
-# ── Macaron palette ───────────────────────────────────────────────────────────
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from mlkem_leakage.palette import (  # noqa: E402
+    ALTERED_COLOR,
+    CONTROL_COLOR,
+    LIGHT_GRAY,
+    NEUTRAL_COLOR,
+    VALID_COLOR,
+)
+
+# ── Shared publication palette ───────────────────────────────────────────────
 C = {
-    "pqcrypto":  "#F9B8C6",   # strawberry pink
-    "liboqs":    "#A8D8B5",   # pistachio mint
-    "pq_edge":   "#D97A96",   # darker pink for edge
-    "lq_edge":   "#5FAD82",   # darker green for edge
-    "ref":       "#C8A0B0",   # muted rose – reference / chance line
-    "text":      "#4A4A4A",
-    "grid":      "#F0EEF0",
-    "ctrl_pq":   "#FAD4E0",   # lighter pink for control
-    "ctrl_lq":   "#C8EDD8",   # lighter green for control
+    "pqcrypto": VALID_COLOR,
+    "liboqs": ALTERED_COLOR,
+    "pq_edge": "#4E7FA5",
+    "lq_edge": "#A40F2D",
+    "ref": NEUTRAL_COLOR,
+    "text": "#222222",
+    "grid": LIGHT_GRAY,
 }
 
 plt.rcParams.update({
@@ -42,7 +55,7 @@ plt.rcParams.update({
     "axes.labelcolor":  C["text"],
     "xtick.color":      C["text"],
     "ytick.color":      C["text"],
-    "axes.edgecolor":   "#CCCCCC",
+    "axes.edgecolor":   "#222222",
 })
 
 VARIANTS   = ["512", "768", "1024"]
@@ -54,8 +67,9 @@ LABELS_CN  = {
     "zero":         "zero",
 }
 
-RESULTS_ROOT = Path("/Users/andrew/PostQuantum/results")
-OUT_DIR = Path("/Users/andrew/PostQuantum/.claude/worktrees/dazzling-roentgen-cc919e/docs/figures")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RESULTS_ROOT = PROJECT_ROOT / "results"
+OUT_DIR = PROJECT_ROOT / "docs" / "figures"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -129,11 +143,11 @@ ax.axhline(0.5, color=C["ref"], linewidth=1.2, linestyle="--", zorder=2, label="
 
 # variant group separators and labels
 for sep in [3.5, 7.5]:
-    ax.axvline(sep, color="#DDDDDD", linewidth=0.8, zorder=1)
+    ax.axvline(sep, color=C["grid"], linewidth=0.8, zorder=1)
 for vi, (vname, xc) in enumerate(zip(VARIANTS, [1.5, 5.5, 9.5])):
     ax.text(xc, ax.get_ylim()[0] if False else 0.483,
             f"ML-KEM-{vname}", ha="center", va="top",
-            fontsize=7.5, color="#888888", style="italic")
+            fontsize=7.5, color=C["ref"], style="italic")
 
 ax.set_xticks(x)
 strat_labels = [s.split("/")[1].replace("_", r"\_") for s in keys]
@@ -148,7 +162,7 @@ ax.spines["right"].set_visible(False)
 handles, lbls = ax.get_legend_handles_labels()
 lbls = [l.replace("随机水平 (0.50)", "Chance (0.50)") for l in lbls]
 ax.legend(handles, lbls, loc="upper right", framealpha=0.85,
-          edgecolor="#DDDDDD", facecolor="white")
+          edgecolor=C["grid"], facecolor="white")
 ax.set_title("Real-scenario Best-model Accuracy: pqcrypto vs.\\ liboqs", pad=6)
 
 fig.tight_layout(pad=0.8)
@@ -167,9 +181,9 @@ pq_d  = [data["pqcrypto"].get(k, {}).get("cohend_mean", np.nan) for k in keys]
 lq_d  = [data["liboqs"].get(k, {}).get("cohend_mean",   np.nan) for k in keys]
 
 variant_colors = {
-    "512":  "#F9B8C6",
-    "768":  "#B8D4F9",
-    "1024": "#B8F9CC",
+    "512": VALID_COLOR,
+    "768": ALTERED_COLOR,
+    "1024": CONTROL_COLOR,
 }
 marker_map = {"single_bit": "o", "byte_flip": "s", "random_bytes": "^", "zero": "D"}
 
@@ -182,8 +196,8 @@ for k, px, ly in zip(keys, pq_d, lq_d):
 lim = 0.22
 ax.set_xlim(-lim, lim)
 ax.set_ylim(-lim, lim)
-ax.axhline(0, color="#DDDDDD", linewidth=0.7)
-ax.axvline(0, color="#DDDDDD", linewidth=0.7)
+ax.axhline(0, color=C["grid"], linewidth=0.7)
+ax.axvline(0, color=C["grid"], linewidth=0.7)
 ax.plot([-lim, lim], [-lim, lim], "--", color=C["ref"], linewidth=1.0, label="y = x")
 
 ax.set_xlabel("Cohen's $d$ — pqcrypto")
@@ -199,13 +213,13 @@ variant_patches = [
     for v, c in variant_colors.items()
 ]
 strategy_handles = [
-    plt.Line2D([0], [0], marker=m, color="w", markerfacecolor="#AAAAAA",
-               markeredgecolor="#888888", markersize=5, label=s.replace("_", r"\_"))
+    plt.Line2D([0], [0], marker=m, color="w", markerfacecolor=C["ref"],
+               markeredgecolor=C["text"], markersize=5, label=s.replace("_", r"\_"))
     for s, m in marker_map.items()
 ]
 ax.legend(handles=variant_patches + strategy_handles,
           loc="lower right", fontsize=6.5, framealpha=0.85,
-          edgecolor="#DDDDDD", ncol=1)
+          edgecolor=C["grid"], ncol=1)
 
 fig.tight_layout(pad=0.8)
 out2 = OUT_DIR / "fig_backend_cohend.pdf"

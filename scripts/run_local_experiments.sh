@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
-PYTHON=".venv-local/Scripts/python.exe"
-OUTPUT_ROOT="results/local_runs"
-ARTIFACTS="results/local_artifacts"
-RUNS=3
-SAMPLES_PER_CLASS=120
-REPETITIONS=20
-N_GROUPS=20
-WARMUP=200
-VARIANTS="512 768 1024"
-INVALID_STRATEGIES="single_bit byte_flip random_bytes zero"
-export LOKY_MAX_CPU_COUNT=8
-export MLKEM_PERMUTATIONS=20
-export MLKEM_N_JOBS=1
+PYTHON="${PYTHON:-.venv/bin/python}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-results/local_runs}"
+ARTIFACTS="${ARTIFACTS:-results/local_artifacts}"
+RUNS="${RUNS:-3}"
+SAMPLES_PER_CLASS="${SAMPLES_PER_CLASS:-120}"
+REPETITIONS="${REPETITIONS:-20}"
+N_GROUPS="${N_GROUPS:-20}"
+WARMUP="${WARMUP:-200}"
+VARIANTS="${VARIANTS:-512 768 1024}"
+INVALID_STRATEGIES="${INVALID_STRATEGIES:-single_bit byte_flip random_bytes zero}"
+export LOKY_MAX_CPU_COUNT="${LOKY_MAX_CPU_COUNT:-8}"
+export MLKEM_PERMUTATIONS="${MLKEM_PERMUTATIONS:-20}"
+export MLKEM_N_JOBS="${MLKEM_N_JOBS:-1}"
 export PYTHONUNBUFFERED=1
 mkdir -p "$OUTPUT_ROOT"
 for run in $(seq -w 1 "$RUNS"); do
